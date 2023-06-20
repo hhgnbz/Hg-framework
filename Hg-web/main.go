@@ -1,32 +1,26 @@
 package main
 
 import (
-	"fmt"
 	"hint"
-	"log"
 	"net/http"
 )
 
 func main() {
-	//http.HandleFunc("/", indexHandler)
-	//http.HandleFunc("/hello", helloHandler)
-	e := hint.New()
-	e.GET("/hello", func(w http.ResponseWriter, req *http.Request) {
-		for k, v := range req.Header {
-			fmt.Fprintf(w, "Header[%q] = %q\n", k, v)
-		}
+	r := hint.New()
+	r.GET("/", func(c *hint.Context) {
+		c.HTML(http.StatusOK, "<h1>Hello Gee</h1>")
 	})
-	log.Fatal(e.Run(":9999"))
-}
+	r.GET("/hello", func(c *hint.Context) {
+		// expect /hello?name=${your name}
+		c.String(http.StatusOK, "hello %s, you're at %s\n", c.Query("name"), c.Path)
+	})
 
-// handler echos r.URL.Path
-func indexHandler(w http.ResponseWriter, req *http.Request) {
-	fmt.Fprintf(w, "Url.Path = %q\n", req.URL.Path)
-}
+	r.POST("/login", func(c *hint.Context) {
+		c.JSON(http.StatusOK, hint.H{
+			"username": c.PostForm("username"),
+			"password": c.PostForm("password"),
+		})
+	})
 
-// handler echos r.Header -> k,v
-func helloHandler(w http.ResponseWriter, req *http.Request) {
-	for k, v := range req.Header {
-		fmt.Fprintf(w, "Req.Header[%q] = %q\n", k, v)
-	}
+	r.Run(":9999")
 }
