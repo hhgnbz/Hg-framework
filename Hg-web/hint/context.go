@@ -25,8 +25,14 @@ type Context struct {
 	// high freq use request info
 	Path   string
 	Method string
+	Params map[string]string
 	// high freq use response info
 	StatusCode int
+}
+
+func (c *Context) Param(key string) string {
+	value, _ := c.Params[key]
+	return value
 }
 
 // inside func to make a newContext
