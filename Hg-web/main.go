@@ -31,7 +31,7 @@ func FormatAsDate(t time.Time) string {
 }
 
 func main() {
-	r := hint.New()
+	r := hint.Default()
 	r.Use(hint.Logger())
 	r.SetFuncMap(template.FuncMap{
 		"FormatAsDate": FormatAsDate,
@@ -46,16 +46,22 @@ func main() {
 	})
 	r.GET("/students", func(c *hint.Context) {
 		c.HTML(http.StatusOK, "arr.tmpl", hint.H{
-			"title":  "gee",
+			"title":  "hg",
 			"stuArr": [2]*student{stu1, stu2},
 		})
 	})
 
 	r.GET("/date", func(c *hint.Context) {
 		c.HTML(http.StatusOK, "custom_func.tmpl", hint.H{
-			"title": "gee",
-			"now":   time.Date(2019, 8, 17, 0, 0, 0, 0, time.UTC),
+			"title": "hg",
+			"now":   time.Date(2023, 6, 27, 0, 0, 0, 0, time.UTC),
 		})
+	})
+
+	// index out of range for testing Recovery()
+	r.GET("/panic", func(c *hint.Context) {
+		names := []string{"hg"}
+		c.String(http.StatusOK, names[100])
 	})
 
 	r.Run(":9999")
