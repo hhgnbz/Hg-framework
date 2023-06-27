@@ -2,10 +2,11 @@ package hint
 
 import (
 	"net/http"
+	"strings"
 )
 
-// handlerFunc for users define methods and actions of request path
-type handlerFunc func(c *Context)
+// HandlerFunc for users define methods and actions of request path
+type HandlerFunc func(c *Context)
 
 // 路由分组
 // e.g.
@@ -20,7 +21,7 @@ type handlerFunc func(c *Context)
 type RouterGroup struct {
 	prefix      string
 	parent      *RouterGroup // 支持分组嵌套
-	middlewares []handlerFunc
+	middlewares []HandlerFunc
 	engine      *Engine // 所有分组共享一个Engine，保存一个指针方便通过Engine访问其他接口
 }
 
@@ -56,7 +57,7 @@ func (group *RouterGroup) Group(prefix string) *RouterGroup {
 // m -> http method(get/post)
 // p -> path
 // h -> handler func
-func (group *RouterGroup) addRouter(m string, p string, h handlerFunc) {
+func (group *RouterGroup) addRouter(m string, p string, h HandlerFunc) {
 	pattern := group.prefix + p
 	group.engine.router.addRouter(m, pattern, h)
 }
@@ -67,17 +68,28 @@ func (e *Engine) Run(port string) error {
 }
 
 // GET is a method for users to add "get" router
-func (group *RouterGroup) GET(p string, h handlerFunc) {
+func (group *RouterGroup) GET(p string, h HandlerFunc) {
 	group.addRouter("GET", p, h)
 }
 
 // POST is a method for users to add "post" router
-func (group *RouterGroup) POST(p string, h handlerFunc) {
+func (group *RouterGroup) POST(p string, h HandlerFunc) {
 	group.addRouter("POST", p, h)
+}
+
+func (group *RouterGroup) Use(middlewares ...HandlerFunc) {
+	group.middlewares = append(group.middlewares, middlewares...)
 }
 
 // impl interface named ServeHTTP
 func (e *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	middlewares := make([]HandlerFunc, 0)
+	for _, g := range e.groups {
+		if strings.HasPrefix(req.URL.Path, g.prefix) {
+			middlewares = append(middlewares, g.middlewares...)
+		}
+	}
 	c := newContext(w, req)
+	c.handlers = middlewares
 	e.router.handle(c)
 }

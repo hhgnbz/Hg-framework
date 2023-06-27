@@ -13,14 +13,14 @@ import (
 // router struct
 type router struct {
 	roots    map[string]*trieNode   // roots key e.g. roots['GET'] roots['POST']
-	handlers map[string]handlerFunc // handlers key e.g. handlers['GET-/p/:lang/doc'], handlers['POST-/p/book']
+	handlers map[string]HandlerFunc // handlers key e.g. handlers['GET-/p/:lang/doc'], handlers['POST-/p/book']
 }
 
 // constructor of Router
 func newRouter() *router {
 	return &router{
 		roots:    make(map[string]*trieNode),
-		handlers: make(map[string]handlerFunc),
+		handlers: make(map[string]HandlerFunc),
 	}
 }
 
@@ -45,10 +45,13 @@ func (r *router) handle(c *Context) {
 	if n != nil {
 		c.Params = params
 		key := c.Method + "-" + n.pattern
-		r.handlers[key](c)
+		c.handlers = append(c.handlers, r.handlers[key])
 	} else {
-		c.String(http.StatusNotFound, "404 Not Found: %s\n", c.Path)
+		c.handlers = append(c.handlers, func(c *Context) {
+			c.String(http.StatusNotFound, "404 Not Found: %s\n", c.Path)
+		})
 	}
+	c.Next()
 }
 
 // inside func for users to add router
@@ -57,7 +60,7 @@ func (r *router) handle(c *Context) {
 // h -> handler func
 // roots key e.g. roots['GET'] roots['POST']
 // handlers key e.g. handlers['GET-/p/:lang/doc'], handlers['POST-/p/book']
-func (r *router) addRouter(m string, p string, h handlerFunc) {
+func (r *router) addRouter(m string, p string, h HandlerFunc) {
 	log.Printf("Route %4s - %s", m, p)
 	parts := parsePattern(p)
 
