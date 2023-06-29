@@ -6,12 +6,23 @@ Refer to : [geektutu - 7天用Go从零实现系列](https://geektutu.com/post/ge
 
 # Hint
 
-A Gin like web framework,Implement refers to Gee
+A Gin like web framework
 
-###  Features
+### Features
 
-- Dynamic router (trie)
+- Dynamic router (Trie base)
 - Routes grouping
 - Middlewares support (Default Crash-free and Logger)
 - Panic handle (Crash-free)
 - Static templates support
+
+# HintCache
+
+A Memcached(Groupcache) like distributed cache framework
+
+### Features
+
+- LRU cache strategy
+- Lock (Mutex base)
+- Load balance (Consistent hash base)
+- Optimized binary communication (protobuf base)
