@@ -1,4 +1,4 @@
-package strategy
+package storage
 
 // Value use Len to count how many bytes it takes
 type Value interface {

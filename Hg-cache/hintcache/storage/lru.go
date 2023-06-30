@@ -1,9 +1,11 @@
-package strategy
+package storage
 
-import "container/list"
+import (
+	"container/list"
+)
 
 const (
-	LRU_CACHE = "lru"
+	LRUStrategy = "lru"
 )
 
 type entry struct {
