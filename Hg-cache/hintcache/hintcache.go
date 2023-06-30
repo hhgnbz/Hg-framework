@@ -88,14 +88,14 @@ func (g *Group) Get(key string) (ByteView, error) {
 	return g.load(key)
 }
 
-// load 当缓存未命中，先尝试远程节点查找，后尝试用户自定义Getter方法查找
-func (g *Group) load(key string) (ByteView, error) {
-	return g.getLocally(key)
-}
-
 // createCache 当缓存未命中，在 远程节点查找击中 或 用户自定义Getter方法查找击中 后调用，将其放入缓存中
 func (g *Group) createCache(key string, val ByteView) {
 	g.mainCache.add(key, val)
+}
+
+// load 当缓存未命中，先尝试远程节点查找，后尝试用户自定义Getter方法查找
+func (g *Group) load(key string) (ByteView, error) {
+	return g.getLocally(key)
 }
 
 // getLocally 调用用户自定义Getter方法查找缓存
