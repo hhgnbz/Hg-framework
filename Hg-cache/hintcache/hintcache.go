@@ -6,12 +6,14 @@ import (
 	"sync"
 )
 
-//                                  是
-// 接收 key --> 检查是否被缓存 -----> 返回缓存值 ⑴
-//          |  否                        是
-//          |-----> 是否应当从远程节点获取 -----> 与远程节点交互 --> 返回缓存值 ⑵
-//                            |  否
-//                            |-----> 调用回调函数，获取值并添加到缓存 --> 返回缓存值 ⑶
+//                           是
+// 接收 key --> 检查是否被缓存 -----> 返回缓存值
+//                 | 否
+//                 |---> 使用一致性哈希选择节点
+//                           |                     是                                  是
+//                           |-----> 是否是远程节点 -----> HTTP 客户端访问远程节点 --> 成功？-----> 服务端返回缓存值
+//                                       | 否                                      ↓ 否
+//                                       |-----------------------------------> 本地节点调用回调函数，获取值并添加到缓存 --> 返回缓存值
 
 // 如果缓存不存在，应从数据源（文件，数据库等）获取数据并添加到缓存中。
 // Q：框架内是否应该支持多数据源配置？
@@ -34,9 +36,10 @@ func (gf GetterFunc) Get(key string) ([]byte, error) {
 // A Group is a cache namespace and associated data loaded spread over
 // 项目中的核心结构
 type Group struct {
-	name      string
-	getter    Getter
-	mainCache cache
+	name       string
+	getter     Getter
+	mainCache  cache
+	peerPicker PeerPicker
 }
 
 var (
@@ -72,6 +75,14 @@ func GetGroup(name string) *Group {
 	return g
 }
 
+// RegisterPeers registers a PeerPicker for choosing remote peer
+func (g *Group) RegisterPeers(peerPicker PeerPicker) {
+	if g.peerPicker != nil {
+		panic("PeerPicker already registered!")
+	}
+	g.peerPicker = peerPicker
+}
+
 // Get value for a key from cache
 // 从 mainCache 中查找缓存，如果存在则返回缓存值。
 // 缓存不存在，则调用 load 方法，load 调用 getLocally（分布式场景下会调用 getFromPeer 从其他节点获取）
@@ -95,6 +106,14 @@ func (g *Group) createCache(key string, val ByteView) {
 
 // load 当缓存未命中，先尝试远程节点查找，后尝试用户自定义Getter方法查找
 func (g *Group) load(key string) (ByteView, error) {
+	if g.peerPicker != nil {
+		if peer, ok := g.peerPicker.PeerGetter(key); ok {
+			if val, err := g.getFromPeer(peer, key); err == nil {
+				return val, nil
+			}
+			log.Println("[HintCache] Failed to get from peer")
+		}
+	}
 	return g.getLocally(key)
 }
 
@@ -109,4 +128,13 @@ func (g *Group) getLocally(key string) (ByteView, error) {
 	// Create k-v data in cache
 	g.createCache(key, val)
 	return val, nil
+}
+
+// getFromPeer
+func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
+	bytes, err := peer.Get(g.name, key)
+	if err != nil {
+		return ByteView{}, err
+	}
+	return ByteView{b: bytes}, nil
 }

@@ -2,32 +2,102 @@ package hintcache
 
 import (
 	"fmt"
+	"hintcache/consistenthash"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
+	"sync"
 )
 
-const basePath = "/_hint/"
+const (
+	basePath        = "/_hint/"
+	defaultReplicas = 50
+)
 
 // HTTPPool implements PeerPicker for a pool of HTTP peers.
 type HTTPPool struct {
 	// baseUrl e.g. http://localhost:8080/
-	curBaseUrl  string
+	self        string
 	curBasePath string
+	mu          sync.Mutex
+	peers       *consistenthash.Map
+	httpGetters map[string]*httpGetter
 }
 
 // NewHTTPPool initializes an HTTP pool of peers.
 func NewHTTPPool(baseUrl string) *HTTPPool {
 	return &HTTPPool{
-		curBaseUrl:  baseUrl,
+		self:        baseUrl,
 		curBasePath: basePath,
 	}
 }
 
+type httpGetter struct {
+	baseUrl string
+}
+
+func (hg *httpGetter) Get(group string, key string) (val []byte, err error) {
+	u := fmt.Sprintf(
+		"%v%v/%v",
+		hg.baseUrl,
+		url.QueryEscape(group),
+		url.QueryEscape(key),
+	)
+	res, err := http.Get(u)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server returned: %v", res.Status)
+	}
+
+	bytes, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading response body: %v", err)
+	}
+
+	return bytes, nil
+}
+
+// 确保类型实现了这个接口 如果没有实现会报错
+var _ PeerGetter = (*httpGetter)(nil)
+
 // Log info with server name
 func (p *HTTPPool) Log(format string, v ...interface{}) {
-	log.Printf("[Server %s] %s", p.curBaseUrl, fmt.Sprintf(format, v...))
+	log.Printf("[Server %s] %s", p.self, fmt.Sprintf(format, v...))
 }
+
+// Set updates the pool's list of peers.
+// 实例化了一致性哈希算法，并且添加了传入的节点，并为每一个节点创建了一个 HTTP 客户端 httpGetter。
+func (p *HTTPPool) Set(peers ...string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.peers = consistenthash.New(defaultReplicas, nil)
+	p.peers.Add(peers...)
+	p.httpGetters = make(map[string]*httpGetter, len(peers))
+	for _, peer := range peers {
+		p.httpGetters[peer] = &httpGetter{baseUrl: peer + p.curBasePath}
+	}
+}
+
+// PeerGetter picks a peer according to key
+// 包装了一致性哈希算法的 Get() 方法，根据具体的 key，选择节点，返回节点对应的 HTTP 客户端。
+func (p *HTTPPool) PeerGetter(key string) (PeerGetter, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if peer := p.peers.Get(key); peer != "" && peer != p.self {
+		p.Log("Pick peer %s", peer)
+		return p.httpGetters[peer], true
+	}
+	return nil, false
+}
+
+// 确保类型实现了这个接口 如果没有实现会报错
+var _ PeerPicker = (*HTTPPool)(nil)
 
 // ServeHTTP handle all http requests
 // 1. 判断访问路径的前缀是否是 basePath，不是返回错误。
