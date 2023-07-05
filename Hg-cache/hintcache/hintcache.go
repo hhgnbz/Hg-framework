@@ -2,6 +2,7 @@ package hintcache
 
 import (
 	"fmt"
+	"hintcache/singleflight"
 	"log"
 	"sync"
 )
@@ -40,6 +41,9 @@ type Group struct {
 	getter     Getter
 	mainCache  cache
 	peerPicker PeerPicker
+	// use singleflight.Group to make sure that
+	// each key is only fetched once
+	loader *singleflight.Group
 }
 
 var (
@@ -60,6 +64,7 @@ func NewGroup(name string, cacheBytes int64, getter Getter) *Group {
 		name:      name,
 		getter:    getter,
 		mainCache: cache{cacheBytes: cacheBytes},
+		loader:    &singleflight.Group{},
 	}
 	// group resister
 	groups[name] = g
@@ -105,16 +110,25 @@ func (g *Group) createCache(key string, val ByteView) {
 }
 
 // load 当缓存未命中，先尝试远程节点查找，后尝试用户自定义Getter方法查找
-func (g *Group) load(key string) (ByteView, error) {
-	if g.peerPicker != nil {
-		if peer, ok := g.peerPicker.PeerGetter(key); ok {
-			if val, err := g.getFromPeer(peer, key); err == nil {
-				return val, nil
+func (g *Group) load(key string) (val ByteView, err error) {
+	// each key is only fetched once (either locally or remotely)
+	// regardless of the number of concurrent callers.
+	viewi, err := g.loader.Do(key, func() (any, error) {
+		if g.peerPicker != nil {
+			if peer, ok := g.peerPicker.PeerGetter(key); ok {
+				if val, err = g.getFromPeer(peer, key); err == nil {
+					return val, nil
+				}
+				log.Println("[HintCache] Failed to get from peer")
 			}
-			log.Println("[HintCache] Failed to get from peer")
 		}
+
+		return g.getLocally(key)
+	})
+	if err == nil {
+		return viewi.(ByteView), nil
 	}
-	return g.getLocally(key)
+	return
 }
 
 // getLocally 调用用户自定义Getter方法查找缓存
