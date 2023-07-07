@@ -26,3 +26,15 @@ A Memcached(Groupcache) like distributed cache framework
 - Lock (Mutex base)
 - Load balance (Consistent hash base)
 - Optimized binary communication (protobuf base)
+
+# HintRPC
+
+A RPC framework based on "net/rpc" package
+
+### Features
+
+- Proto exchange
+- Registry
+- Service discovery
+- Load balance
+- Timeout processing
