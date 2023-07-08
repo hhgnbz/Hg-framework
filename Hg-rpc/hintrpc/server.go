@@ -21,7 +21,7 @@ import (
 
 // 需要确定编解码方式(Json/Gob)，通过Option结构体确定
 
-// MagicNum 用于确定请求的为HintRpc
+// MagicNumber 用于确定请求的为HintRpc
 const MagicNumber = 0xaebc2e
 
 type Option struct {
