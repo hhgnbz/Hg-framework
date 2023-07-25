@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"reflect"
 	"strings"
 	"sync"
@@ -39,6 +40,58 @@ var DefaultOption = &Option{
 	MagicNumber:    MagicNumber,
 	CodecType:      codec.GobType,
 	ConnectTimeout: time.Second * 10, // default 10 seconds
+}
+
+// Web 开发中，经常使用 HTTP 协议中的 HEAD、GET、POST 等方式发送请求，等待响应。
+// 但 RPC 的消息格式与标准的 HTTP 协议并不兼容，在这种情况下，就需要一个协议的转换过程。
+// HTTP 协议的 CONNECT 方法恰好提供了这个能力，CONNECT 一般用于代理服务。
+// 浏览器通过 HTTP 明文形式向代理服务器发送一个 CONNECT 请求告诉代理服务器目标地址和端口
+// 代理服务器接收到这个请求后，会在对应端口与目标站点建立一个 TCP 连接，连接建立成功后返回 HTTP 200 状态码告诉浏览器与该站点的加密通道已经完成。
+// 接下来代理服务器仅需透传浏览器和服务器之间的加密数据包即可，代理服务器无需解析 HTTPS 报文。
+
+// 用户 <--------> HTTP 代理服务器 <--------> HTTPS 目标站点
+//  ↑   明文请求        ↑          TCP 连接
+//  |-----------------|           透传数据
+//      HTTP 200
+
+const (
+	connected        = "200 Connected to Hint RPC"
+	defaultRPCPath   = "/_hintprc_"
+	defaultDebugPath = "/debug/hintrpc"
+)
+
+// ServeHTTP implements a http.Handler that answers RPC requests.
+func (server *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	// 代理服务器确认客户端请求为 CONNECT 方法,否则报错
+	if req.Method != "CONNECT" {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_, _ = io.WriteString(w, "405 must CONNECT\n")
+		return
+	}
+	// Hijack lets the caller take over the connection.
+	// After a call to Hijack the HTTP server library will not do anything else with the connection.
+	conn, _, err := w.(http.Hijacker).Hijack()
+	if err != nil {
+		log.Print("rpc hijacking ", req.RemoteAddr, ": ", err.Error())
+		return
+	}
+	_, _ = io.WriteString(conn, "HTTP/1.0 "+connected+"\n\n")
+	// Hijack 返回的连接,送到 ServeConn 进行可用性检测后进入最终的rpc调用
+	server.ServeConn(conn)
+}
+
+// HandleHTTP registers an HTTP handler for RPC messages on rpcPath.
+// It is still necessary to invoke http.Serve(), typically in a go statement.
+func (server *Server) HandleHTTP() {
+	http.Handle(defaultRPCPath, server)
+	http.Handle(defaultDebugPath, debugHTTP{server})
+	log.Println("rpc server debug path:", defaultDebugPath)
+}
+
+// HandleHTTP is a convenient approach for default server to register HTTP handlers
+func HandleHTTP() {
+	DefaultServer.HandleHTTP()
 }
 
 // 报文定义:

@@ -36,5 +36,6 @@ A RPC framework based on "net/rpc" package
 - Proto exchange
 - Registry
 - Service discovery
+- HTTP protocol support
 - Load balance
 - Timeout processing
