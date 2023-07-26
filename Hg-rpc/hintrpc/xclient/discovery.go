@@ -2,8 +2,11 @@ package xclient
 
 import (
 	"errors"
+	"log"
 	"math"
 	"math/rand"
+	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -31,6 +34,17 @@ type MultiServersDiscovery struct {
 	servers []string
 	mu      sync.RWMutex
 }
+
+func NewMultiServersDiscovery(servers []string) *MultiServersDiscovery {
+	d := &MultiServersDiscovery{
+		servers: servers,
+		r:       rand.New(rand.NewSource(time.Now().UnixNano())), // 初始化时使用时间戳设定随机数种子，避免每次产生相同的随机数序列
+	}
+	d.index = d.r.Intn(math.MaxInt32 - 1) // index 记录 Round Robin 算法已经轮询到的位置，为了避免每次从 0 开始，初始化时随机设定一个值。
+	return d
+}
+
+var _ Discovery = (*MultiServersDiscovery)(nil)
 
 // Refresh 对于 MultiServersDiscovery 无意义
 func (m *MultiServersDiscovery) Refresh() error {
@@ -73,13 +87,71 @@ func (m *MultiServersDiscovery) GetAll() ([]string, error) {
 	return res, nil
 }
 
-func NewMultiServersDiscovery(servers []string) *MultiServersDiscovery {
-	d := &MultiServersDiscovery{
-		servers: servers,
-		r:       rand.New(rand.NewSource(time.Now().UnixNano())), // 初始化时使用时间戳设定随机数种子，避免每次产生相同的随机数序列
-	}
-	d.index = d.r.Intn(math.MaxInt32 - 1) // index 记录 Round Robin 算法已经轮询到的位置，为了避免每次从 0 开始，初始化时随机设定一个值。
-	return d
+// HintServersDiscovery 自动维护服务列表，包含了MultiServersDiscovery中的所有能力
+type HintServersDiscovery struct {
+	*MultiServersDiscovery
+	registry   string
+	timeout    time.Duration
+	lastUpdate time.Time
 }
 
-var _ Discovery = (*MultiServersDiscovery)(nil)
+const defaultUpdateTimeout = time.Second * 10
+
+func NewHintServersDiscovery(registryAddr string, timeout time.Duration) *HintServersDiscovery {
+	if timeout == 0 {
+		timeout = defaultUpdateTimeout
+	}
+	return &HintServersDiscovery{
+		MultiServersDiscovery: NewMultiServersDiscovery(make([]string, 0)),
+		timeout:               timeout,
+		registry:              registryAddr,
+	}
+}
+
+var _ Discovery = (*HintServersDiscovery)(nil)
+
+func (hsd *HintServersDiscovery) Refresh() error {
+	hsd.mu.Lock()
+	defer hsd.mu.Unlock()
+	if hsd.lastUpdate.Add(hsd.timeout).After(time.Now()) {
+		// 时间未到
+		return nil
+	}
+	log.Println("rpc registry: refresh servers from registry", hsd.registry)
+	resp, err := http.Get(hsd.registry)
+	if err != nil {
+		log.Println("rpc registry refresh err:", err)
+		return err
+	}
+	servers := strings.Split(resp.Header.Get("X-Hintrpc-Servers"), ",")
+	hsd.servers = make([]string, 0, len(servers))
+	for _, server := range servers {
+		if strings.TrimSpace(server) != "" {
+			hsd.servers = append(hsd.servers, strings.TrimSpace(server))
+		}
+	}
+	hsd.lastUpdate = time.Now()
+	return nil
+}
+
+func (hsd *HintServersDiscovery) Update(servers []string) error {
+	hsd.mu.Lock()
+	defer hsd.mu.Unlock()
+	hsd.servers = servers
+	hsd.lastUpdate = time.Now()
+	return nil
+}
+
+func (hsd *HintServersDiscovery) Get(mode SelectMode) (string, error) {
+	if err := hsd.Refresh(); err != nil {
+		return "", err
+	}
+	return hsd.MultiServersDiscovery.Get(mode)
+}
+
+func (hsd *HintServersDiscovery) GetAll() ([]string, error) {
+	if err := hsd.Refresh(); err != nil {
+		return nil, err
+	}
+	return hsd.MultiServersDiscovery.GetAll()
+}
