@@ -42,8 +42,7 @@ type Group struct {
 	getter     Getter
 	mainCache  cache
 	peerPicker PeerPicker
-	// use singleflight.Group to make sure that
-	// each key is only fetched once
+	// use singleflight.Group to make sure that each key is only fetched once
 	loader *singleflight.Group
 }
 
@@ -55,7 +54,7 @@ var (
 )
 
 // NewGroup create a new instance of Group
-func NewGroup(name string, cacheBytes int64, getter Getter) *Group {
+func NewGroup(name, cacheStrategy string, cacheBytes int64, getter Getter) *Group {
 	if getter == nil {
 		panic("nil getter!")
 	}
@@ -64,7 +63,7 @@ func NewGroup(name string, cacheBytes int64, getter Getter) *Group {
 	g := &Group{
 		name:      name,
 		getter:    getter,
-		mainCache: cache{cacheBytes: cacheBytes},
+		mainCache: cache{cacheBytes: cacheBytes, cacheStrategy: cacheStrategy},
 		loader:    &singleflight.Group{},
 	}
 	// group resister

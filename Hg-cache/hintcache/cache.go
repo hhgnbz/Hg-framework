@@ -6,28 +6,29 @@ import (
 )
 
 type cache struct {
-	mu         sync.Mutex
-	lru        *storage.LRUCache
-	cacheBytes int64
+	mu             sync.Mutex
+	entryInterface storage.EntryInterface
+	cacheStrategy  string
+	cacheBytes     int64
 }
 
 func (c *cache) add(key string, val ByteView) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	// Lazy Initialization
-	if c.lru == nil {
-		c.lru = storage.NewLruCache(c.cacheBytes, nil)
+	if c.entryInterface == nil {
+		c.entryInterface = storage.NewEntryInterface(c.cacheStrategy, c.cacheBytes, nil)
 	}
-	c.lru.Add(key, val)
+	c.entryInterface.Add(key, val)
 }
 
 func (c *cache) get(key string) (val ByteView, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.lru == nil {
+	if c.entryInterface == nil {
 		return
 	}
-	if v, ok := c.lru.Get(key); ok {
+	if v, ok := c.entryInterface.Get(key); ok {
 		return v.(ByteView), ok
 	}
 	return

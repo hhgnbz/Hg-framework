@@ -8,11 +8,6 @@ const (
 	LRUStrategy = "lru"
 )
 
-type entry struct {
-	key string
-	val Value
-}
-
 type LRUCache struct {
 	maxBytes  int64
 	usedBytes int64
@@ -45,24 +40,6 @@ func (c *LRUCache) Get(key string) (val Value, ok bool) {
 	return
 }
 
-// RemoveTheOldest removes the oldest item
-// c.ll.Back() 取到队首节点，从链表中删除。
-// delete(c.cache, kv.key)，从字典中 c.cache 删除该节点的映射关系。
-// 更新当前所用的内存 c.usedBytes。
-// 如果回调函数 OnEvicted 不为 nil，则调用回调函数。
-func (c *LRUCache) RemoveTheOldest() {
-	ele := c.ll.Back()
-	if ele != nil {
-		c.ll.Remove(ele)
-		kv := ele.Value.(*entry)
-		delete(c.cache, kv.key)
-		c.usedBytes -= int64(len(kv.key)) + int64(kv.val.Len())
-		if c.OnEvicted != nil {
-			c.OnEvicted(kv.key, kv.val)
-		}
-	}
-}
-
 // Add adds a value to the cache.
 // 如果键存在，则更新对应节点的值，并将该节点移到队尾。
 // 不存在则是新增场景，首先队尾添加新节点 &entry{key, value}, 并字典中添加 key 和节点的映射关系。
@@ -79,10 +56,28 @@ func (c *LRUCache) Add(key string, val Value) {
 		c.usedBytes += int64(len(key)) + int64(val.Len())
 	}
 	if c.maxBytes != 0 && c.usedBytes > c.maxBytes {
-		c.RemoveTheOldest()
+		c.removeTheOldest()
 	}
 }
 
 func (c *LRUCache) Len() int {
 	return c.ll.Len()
+}
+
+// removeTheOldest removes the oldest item
+// c.ll.Back() 取到队首节点，从链表中删除。
+// delete(c.cache, kv.key)，从字典中 c.cache 删除该节点的映射关系。
+// 更新当前所用的内存 c.usedBytes。
+// 如果回调函数 OnEvicted 不为 nil，则调用回调函数。
+func (c *LRUCache) removeTheOldest() {
+	ele := c.ll.Back()
+	if ele != nil {
+		c.ll.Remove(ele)
+		kv := ele.Value.(*entry)
+		delete(c.cache, kv.key)
+		c.usedBytes -= int64(len(kv.key)) + int64(kv.val.Len())
+		if c.OnEvicted != nil {
+			c.OnEvicted(kv.key, kv.val)
+		}
+	}
 }
