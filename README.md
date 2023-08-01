@@ -22,10 +22,14 @@ A Memcached(Groupcache) like distributed cache framework
 
 ### Features
 
-- LRU cache strategy
+- cache evict strategy
 - Lock (Mutex base)
 - Load balance (Consistent hash base)
 - Optimized binary communication (protobuf base)
+
+### Updates
+
+- 2023/08/01 support FIFO/LFU cache strategy
 
 # HintRPC
 
