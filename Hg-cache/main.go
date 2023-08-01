@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	hc "hintcache"
+	"hintcache/storage"
 	"log"
 	"net/http"
 )
@@ -15,7 +16,7 @@ var db = map[string]string{
 }
 
 func createGroup() *hc.Group {
-	return hc.NewGroup("scores", 2<<10, hc.GetterFunc(
+	return hc.NewGroup("scores", storage.LRUStrategy, 2<<10, hc.GetterFunc(
 		func(key string) ([]byte, error) {
 			log.Println("[SlowDB] search key", key)
 			if v, ok := db[key]; ok {

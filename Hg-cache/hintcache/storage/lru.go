@@ -17,7 +17,7 @@ type LRUCache struct {
 }
 
 // NewLruCache is the constructor of LRUCache
-func NewLruCache(maxByte int64, onEvicted func(string, Value)) *LRUCache {
+func newLruCache(maxByte int64, onEvicted func(string, Value)) *LRUCache {
 	return &LRUCache{
 		maxBytes:  maxByte,
 		ll:        list.New(),

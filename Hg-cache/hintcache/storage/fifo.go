@@ -14,8 +14,8 @@ type FIFOCache struct {
 	OnEvicted func(key string, val Value)
 }
 
-// NewFifoCache is the constructor of LRUCache
-func NewFifoCache(maxByte int64, onEvicted func(string, Value)) *FIFOCache {
+// newFifoCache is the constructor of LRUCache
+func newFifoCache(maxByte int64, onEvicted func(string, Value)) *FIFOCache {
 	return &FIFOCache{
 		maxBytes:  maxByte,
 		ll:        list.New(),

@@ -2,6 +2,7 @@ package hintcache
 
 import (
 	"fmt"
+	"hintcache/storage"
 	"log"
 	"testing"
 )
@@ -14,7 +15,7 @@ var db = map[string]string{
 
 func TestGet(t *testing.T) {
 	loadCounts := make(map[string]int, len(db))
-	h := NewGroup("names", 2<<10, GetterFunc(
+	h := NewGroup("names", storage.LRUStrategy, 2<<10, GetterFunc(
 		func(key string) ([]byte, error) {
 			log.Println("[SlowDB] search key", key)
 			if v, ok := db[key]; ok {
